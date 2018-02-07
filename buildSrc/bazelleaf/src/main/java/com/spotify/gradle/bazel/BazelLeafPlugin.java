@@ -4,6 +4,7 @@ import com.spotify.gradle.bazel.strategies.Factory;
 import com.spotify.gradle.bazel.strategies.Strategy;
 import com.spotify.gradle.bazel.tasks.BazelCleanTask;
 
+import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
@@ -11,6 +12,8 @@ import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.plugins.ide.idea.IdeaPlugin;
 import org.gradle.plugins.ide.idea.model.IdeaModule;
+import org.gradle.plugins.ide.idea.model.Module;
+import org.gradle.plugins.ide.idea.model.ModuleDependency;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -103,6 +106,32 @@ public class BazelLeafPlugin implements Plugin<Project> {
             final Task bazelTestTask = testStrategy.createBazelExecTask(project);
             ideaModule.setTestSourceDirs(getSourceFoldersFromBazelAspect(rootProject, aspectRunner, config.testTargetName));
         }
+
+        // HACK HACK COUGH COUGH
+        // DANGER!! HARDCODED AREA BEGINS
+        if (project.getName().equals("andlib")) {
+
+            // add the project dependency to the default configuration
+            Map projectMap = new HashMap();
+            projectMap.put("path", ":andlib:innerandlib");
+            Dependency projectDependency = project.getDependencies().project(projectMap);
+            // doesn't seem to have any effect for bazel-leaf projects
+            defaultConfiguration.getDependencies().add(projectDependency);
+
+            // add the ModuleDependency for the orderEntry to the module directly to the IML file
+            // this works at the CLI level using `./gradlew idea`
+            // Android Studio ends up removing the added module when it refreshes
+            // the IML file /bazel-leaf/andlib/andlib.iml
+            ideaModule.getIml().getWhenMerged().add(new Action<Module>() {
+                @Override
+                public void execute(Module imlModule) {
+                    System.out.println("[" + project.getName() + "] whenMerged called");
+                    imlModule.getDependencies().add(new ModuleDependency("innerandlib", null));
+                }
+            });
+        }
+        // DANGER!! HARDCODED AREA ENDS
+
     }
 
     private static List<String> getModuleDepsFromBazel(AspectRunner aspectRunner, String targetName) {
